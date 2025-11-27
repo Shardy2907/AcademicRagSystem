@@ -1,10 +1,20 @@
-# Python-generated files
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+.eggs/
+qdrant_local/
+uv.lock
 
-# Virtual environments
-.venv
+# ---------------------------
+# OS-specific
+# ---------------------------
+.DS_Store
+Thumbs.db
