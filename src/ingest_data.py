@@ -10,12 +10,15 @@ from qdrant_client.http import models as qdrant_models
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # --- Configuration Constants ---
-DATA_PATH = "data/"
-QDRANT_PATH = "qdrant_local" 
+DATA_PATH = os.path.join(PROJECT_ROOT, "data")
+QDRANT_PATH = os.path.join(PROJECT_ROOT, "qdrant_local")
 COLLECTION_NAME = "university_docs"
 HF_EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIMENSION = 384
+
 
 # Configure Logger to write to file and stderr
 logger.remove() # Remove default handler to avoid double logging if re-run

@@ -10,12 +10,15 @@ from langchain_qdrant import QdrantVectorStore
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # --- Configuration Constants ---
-QDRANT_PATH = "qdrant_local"
+QDRANT_PATH = os.path.join(PROJECT_ROOT, "qdrant_local")
 COLLECTION_NAME = "university_docs"
-# Using standard BGE model via the new HuggingFaceEmbeddings class
+
 HF_EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 OLLAMA_LLM_MODEL = "phi3:mini"
+
 
 # Configure Logger
 logger.remove()
@@ -61,7 +64,10 @@ def initialize_qa_chain():
         raise
 
     # 3. Create Retriever
-    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+    retriever = db.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 3, "score_threshold": 0.3})
+
 
     # 4. Initialize Ollama
     logger.info(f"Initializing LLM: {OLLAMA_LLM_MODEL}...")
@@ -87,7 +93,7 @@ def initialize_qa_chain():
         verbose=False 
     )
     
-    return qa_chain
+    return qa_chain, client
 
 def main():
     logger.info("Starting RAG System Initialization...")
@@ -142,6 +148,11 @@ def main():
             break
         except Exception as e:
             logger.error(f"Error processing query: {e}")
+
+def rag_answer(qa_chain, query: str):
+    """Wrapper used by LangGraph to execute your RAG chain."""
+    return qa_chain.invoke({"query": query})
+
 
 if __name__ == "__main__":
     main()
