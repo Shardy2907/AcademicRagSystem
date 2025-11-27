@@ -16,5 +16,6 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "qdrant-client>=1.16.1",
     "sentence-transformers>=5.1.2",
+    "streamlit>=1.50.0",
     "tavily>=1.1.0",
 ]
