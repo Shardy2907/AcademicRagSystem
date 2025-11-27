@@ -130,6 +130,12 @@ def supervisor_node(state):
             - company/product facts
             - general knowledge outside the PDFs
 
+            3. "general"
+            Use this whenever the conversation by the user is casual. Anything regarding welcoms and goodbyes are supposed to be handled by this agent.
+            Use this agent when:
+            - Anything regarding hi, hello, bye
+            - user is trying to just have a casual conversation
+    
             Important Routing Rules:
             • NEVER choose "web" if the question could possibly be answered using the PDFs.
             • ALWAYS choose "rag" first for academic or technical queries, unless RAG evidence shows insufficient coverage.
@@ -138,7 +144,7 @@ def supervisor_node(state):
                 but the documents do not contain enough detail, choose "web" to provide a more complete answer.
 
             Output Requirement:
-            Respond with ONLY one token: rag or web.
+            Respond with ONLY one token: rag or web or general.
             """
 
         # Avoid using web unless absolutely necessary
@@ -150,6 +156,8 @@ def supervisor_node(state):
 
         if "web" in decision:
             next_agent = "web_agent"
+        elif "general" in decision:
+            next_agent = "general_agent"
         else:
             next_agent = "rag_agent"
         logger.info(f"[SUPERVISOR] → {next_agent} (LLM decision)")
