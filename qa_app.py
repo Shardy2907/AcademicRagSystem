@@ -7,6 +7,8 @@ from langchain_community.llms import Ollama
 from qdrant_client import QdrantClient
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # --- Configuration Constants ---
 QDRANT_PATH = "qdrant_local"

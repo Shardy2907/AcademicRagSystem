@@ -3,10 +3,12 @@ import sys
 from loguru import logger
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceBgeEmbeddings
-from langchain_community.vectorstores import Qdrant
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_qdrant import Qdrant
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qdrant_models
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # --- Configuration Constants ---
 DATA_PATH = "data/"
@@ -61,7 +63,7 @@ def ingest_data():
     try:
         model_kwargs = {"device": "cpu"} 
         encode_kwargs = {"normalize_embeddings": True}
-        embeddings = HuggingFaceBgeEmbeddings(
+        embeddings = HuggingFaceEmbeddings(
             model_name=HF_EMBEDDING_MODEL_NAME,
             model_kwargs=model_kwargs,
             encode_kwargs=encode_kwargs
