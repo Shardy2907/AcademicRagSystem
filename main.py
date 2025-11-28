@@ -13,7 +13,6 @@ load_dotenv()
 
 logger.remove()
 logger.add(sys.stderr, level="INFO")
-logger.add("main.log", rotation="5 MB", level="DEBUG")
 
 logger.info("Starting main.py...")
 
@@ -63,19 +62,6 @@ def supervisor_node(state):
         query = state["messages"][-1]["content"].lower()
         logger.info(f"[SUPERVISOR] Received...")
 
-        # 1. Check for chit-chat patterns
-        smalltalk_triggers = [
-            "hi", "hello", "hey", "good morning",
-            "good evening", "thanks", "thank you",
-            "who are you", "what can you do",
-            "how are you"
-        ]
-
-        if any(trigger in query for trigger in smalltalk_triggers):
-            logger.info("[SUPERVISOR] → general_agent (smalltalk)")
-            return _route(state, "general_agent")
-
-        # 2. Check RAG relevance
         qa_chain = state["qa_chain"]
         retriever = qa_chain.retriever
         docs = retriever.get_relevant_documents(query)
@@ -84,67 +70,58 @@ def supervisor_node(state):
             logger.info("[SUPERVISOR] → rag_agent (high similarity)")
             return _route(state, "rag_agent")
 
-        
-        # 1c. Explicit reference to PDFs or dataset → ALWAYS RAG
-        dataset_keywords = [
-            "pdf", "document", "lecture", "notes", "chapter", "section",
-            "coordinate transformations", "transformations", "robotik",
-            "skript", "university_docs"
-        ]
-
-        if any(keyword in query for keyword in dataset_keywords):
-            logger.info(f"[SUPERVISOR] → rag_agent (matched dataset keyword)")
-            return _route(state, "rag_agent")
-
-
-        general_safe_topics = [
-            "physics", "math", "engineering", "robotics", "control",
-            "electrical", "mechanical", "formula", "law",
-            "matrix", "vector", "algorithm", "programming",
-        ]
-
-        if any(topic in query for topic in general_safe_topics):
-            logger.info("[SUPERVISOR] → general_agent (safe technical knowledge)")
-            return _route(state, "general_agent")
-
         # 3. Default → LLM-based decision (rag vs web)
         llm = Ollama(model="phi3:mini", base_url="http://localhost:11434", temperature=0.2)
 
         system_prompt = """
-            You are a routing supervisor responsible for choosing exactly ONE agent.
+            You are the Routing Supervisor of a multi-agent RAG system. 
+            Your job is to choose exactly ONE agent for the user's query.
 
-            Available Agents:
-            1. "rag"
-            Use this when the question is about:
-            - university courses
-            - robotics concepts
-            - lecture notes, formulas, algorithms
-            - ANY technical or academic topic likely found in the PDFs
+            THE AGENTS:
 
-            Prefer "rag" for ANY engineering, robotics, control systems, mechatronics, or mathematics-related query.
+            1. rag
+            Use this agent when the user's query is:
+            - academic 
+            - technical
+            - related to any robotics topics
+            - connected to the content of the local PDFs
+            If the user appears to ask anything that might be inside the documents, 
+            prefer "rag" unless clearly not relevant.
 
-            2. "web"
-            Use this ONLY when the answer clearly requires external or real-world information:
-            - geography, politics, world events
-            - current affairs, public figures
-            - company/product facts
-            - general knowledge outside the PDFs
+            2. web
+            Use this ONLY when the question requires real-world, external, 
+            live, or factual information that is NOT available in the PDFs.
+            Typical cases:
+            - geography
+            - world events
+            - company info
+            - current affairs
+            - rare facts that clearly require web search
+            Always use "web" when the user asks anything about any public figure or any particular human.
+            Typical cases:
+            - Who is Lionel Messi?
+            - Who is John Doe?
+            Never choose "web" if the question could possibly be answered using the PDFs.
 
-            3. "general"
-            Use this whenever the conversation by the user is casual. Anything regarding welcoms and goodbyes are supposed to be handled by this agent.
-            Use this agent when:
-            - Anything regarding hi, hello, bye
-            - user is trying to just have a casual conversation
-    
-            Important Routing Rules:
-            • NEVER choose "web" if the question could possibly be answered using the PDFs.
-            • ALWAYS choose "rag" first for academic or technical queries, unless RAG evidence shows insufficient coverage.
-            • Exception: 
-                If the user asks for deeper explanation of a technical topic covered in the PDFs, 
-                but the documents do not contain enough detail, choose "web" to provide a more complete answer.
+            3. general
+            Use this when the user's intent is:
+            - greeting, farewell, or general conversation
+            - asking about the chatbot itself, its abilities, its architecture
+            - asking how the system works
+            - asking a general conceptual question that does NOT require web search
+            - small “LLM answerable” questions not related to the PDF
+            - random chitchat conversations
 
-            Output Requirement:
-            Respond with ONLY one token: rag or web or general.
+            ADDITIONAL RULES:
+            - If the user asks about the system (e.g., "how do you work?"), always choose "general".
+            - If the user greets, always choose "general".
+            - If the query can be answered by reasoning alone (without PDFs or web), choose "general".
+
+            OUTPUT:
+            Respond ONLY with one word:
+            rag
+            web
+            general
             """
 
         # Avoid using web unless absolutely necessary

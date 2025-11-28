@@ -23,7 +23,6 @@ EMBEDDING_DIMENSION = 384
 # Configure Logger to write to file and stderr
 logger.remove() # Remove default handler to avoid double logging if re-run
 logger.add(sys.stderr, level="INFO")
-logger.add("ingestion.log", rotation="10 MB", level="DEBUG")
 
 def ingest_data():
     logger.info("DATA INGESTION STARTED")

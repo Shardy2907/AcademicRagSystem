@@ -1,117 +1,142 @@
 import os
-from typing import TypedDict, Optional, List
 from tavily import TavilyClient
 from langchain_community.llms import Ollama
+from langchain_huggingface import HuggingFaceEmbeddings
 from loguru import logger
+import numpy as np
 
-logger.add("agent_web.log", rotation="5 MB", level="DEBUG")
 
-
-import os
-from tavily import TavilyClient
+# Load embeddings once
+emb = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-en-v1.5",
+    encode_kwargs={"normalize_embeddings": True}
+)
 
 def internet_search(query: str):
-    """Return raw Tavily results for summarization."""
     try:
         api_key = os.getenv("TAVILY_API_KEY")
-
         if not api_key:
-            logger.error("[WEB AGENT] Missing TAVILY_API_KEY.")
+            logger.error("Missing Tavily API Key")
             return []
 
         tavily = TavilyClient(api_key=api_key)
-        logger.info(f"[WEB AGENT] Tavily search triggered...")
-
         response = tavily.search(
             query=query,
             max_results=5,
             include_raw_content=False
         )
-
         return response.get("results", [])
 
-    except Exception as tavily_err:
-        logger.error(f"[WEB AGENT] Tavily search failed: {tavily_err}")
+    except Exception as e:
+        logger.error(f"Tavily error: {e}")
         return []
 
-def web_agent_node(state):
+
+def choose_best_result(query: str, results: list):
+    """Select the most relevant search result using embeddings + LLM validation."""
+    if not results:
+        return None
+
     try:
-        query = state["messages"][-1]["content"]
-        logger.info(f"[WEB AGENT] Received query...")
+        q_vec = emb.embed_query(query)
+        scores = []
 
-    # Get Tavily results
-        results = internet_search(query)
+        for r in results:
+            text = r.get("content", "")
+            if not text.strip():
+                scores.append(-1)
+                continue
 
-        if not results:
-            summary = "No internet results found."
-            logger.warning("[WEB AGENT] No results received from Tavily.")
-            return _update_state(state, summary)
-        
-        try:
-            # Extract text content from Tavily results
-            content_blocks = [r.get("content", "") for r in results if r.get("content")]
-            
-            combined_text = "\n\n".join(content_blocks)
-            if not combined_text.strip():
-                logger.warning("[WEB AGENT] Tavily results contained no usable text.")
-                summary = "No meaningful content found in search results."
-                return _update_state(state, summary)
+            vec = emb.embed_query(text)
+            score = np.dot(q_vec, vec)
+            scores.append(score)
 
-            logger.debug("[WEB AGENT] Combined Tavily text ready for summarization.")
+        # Take top 2 candidates
+        top_idx = np.argsort(scores)[::-1][:2]
 
-        except Exception as extract_err:
-            logger.error(f"[WEB AGENT] Failed to extract Tavily content: {extract_err}")
-            summary = "Internet search returned unreadable data."
-            return _update_state(state, summary)
+        candidates = [results[i] for i in top_idx if scores[i] > 0.1]
 
-        try:
+        # If still empty → nothing relevant
+        if not candidates:
+            return None
 
-            # Summarize using LLM
-            llm = Ollama(
-                model="phi3:mini",
-                base_url="http://localhost:11434",
-                temperature=0.3
-            )
+        # LLM final selection
+        llm = Ollama(model="phi3:mini", base_url="http://localhost:11434")
 
-            prompt = f"""
-            You are an intelligent summarizing assistant.
-            Summarize the key information from the following internet search snippets 
-            into ONE clear, concise answer. Avoid redundancy. 
-            Do not mention that this is a summary.
+        numbered = ""
+        for i, c in enumerate(candidates):
+            numbered += f"{i+1}. {c.get('content', '')[:500]}\n\n"
 
-            Query: {query}
+        selector_prompt = f"""
+You are selecting the single search result that most accurately answers the question.
 
-            Snippets:
-            {combined_text}
+QUESTION:
+{query}
 
-            Provide one clean answer:
-            """
+CANDIDATES:
+{numbered}
 
-            summary = llm.invoke(prompt).strip()
-            logger.info(f"[WEB AGENT] Summary generated successfully.")
+Respond ONLY with the number of the correct result (1 or 2).
+If neither candidate is clearly correct, respond with "0".
+"""
 
-        except Exception as summarization_err:
-            logger.error(f"[WEB AGENT] LLM summarization failed: {summarization_err}")
-            summary = "I couldn't summarize the search results due to an internal error."
+        selection = llm.invoke(selector_prompt).strip()
 
-        return _update_state(state, summary)
-    
+        if selection == "1":
+            return candidates[0]
+        elif selection == "2" and len(candidates) > 1:
+            return candidates[1]
+        else:
+            return None
+
     except Exception as e:
-        logger.exception(f"[WEB AGENT] Unexpected agent failure: {e}")
-        fallback = "The web agent encountered an unexpected error."
-        return _update_state(state, fallback)
-    
-def _update_state(state, summary: str):
+        logger.error(f"Selection error: {e}")
+        return None
 
-    # Update state
+
+def web_agent_node(state):
+    query = state["messages"][-1]["content"]
+
+    # Step 1: Get all results
+    results = internet_search(query)
+
+    if not results:
+        return _update(state, "No information found online.")
+
+    # Step 2: Choose best result
+    best = choose_best_result(query, results)
+
+    if best is None:
+        return _update(state, "No reliable information found online.")
+
+    text = best.get("content", "No information.")
+
+    # Step 3: Summarize that result only
+    llm = Ollama(model="phi3:mini", base_url="http://localhost:11434")
+
+    prompt = f"""
+Summarize the following information into a clear, correct answer.
+
+Query: {query}
+
+Text:
+{text}
+
+Give one accurate answer. Do not add extra information.
+"""
+
+    try:
+        summary = llm.invoke(prompt).strip()
+    except:
+        summary = "Unable to summarize the online information."
+
+    return _update(state, summary)
+
+
+def _update(state, result):
     new_state = dict(state)
-    new_state["web_result"] = summary
+    new_state["web_result"] = result
     new_state["messages"] = state["messages"] + [
-        {
-            "role": "assistant",
-            "content": summary,
-            "agent": "web"
-        }
+        {"role": "assistant", "content": result, "agent": "web"}
     ]
-
     return new_state
