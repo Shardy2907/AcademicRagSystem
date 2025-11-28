@@ -18,7 +18,7 @@ uv.lock
 # ---------------------------
 .DS_Store
 Thumbs.db
-
+*.pdf
 *.log
 
 .env

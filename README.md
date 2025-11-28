@@ -85,8 +85,8 @@ The system ensures the best agent is always chosen.
 
 ## Step 1 — Clone the Repository
 ```bash
-git clone <your-repo-url>
-cd <your-project>
+git clone <https://github.com/Shardy2907/AcademicRagSystem.git>
+cd <AcademicRagSystem>
 ```
 
 ---
